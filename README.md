@@ -47,7 +47,7 @@ Price/High/Low   simple returns,     Batched sliding      N-axis: graph      Sof
 
 **Data flow:**
 
-1. **Sample extraction** (`extract_time_series_batches` in `train.py`) — for every prediction date, a sliding window over the dataset produces three tensors plus a date label:
+1. **Sample extraction** (`extract_time_series_batches` in `scripts/train.py`) — for every prediction date, a sliding window over the dataset produces three tensors plus a date label:
    - `x`: `[B, N, T, E]` — the recent `sequence_length`-day feature window (default `T=21`; `E=2` features: simple returns and high-low range returns). This is the only tensor fed into the score model.
    - `y`: `[B, N, horizon]` — realized future returns (default `horizon=1`), used to score realized performance in the loss and evaluation metrics.
    - `x_cov`: `[B, N, burn_in_period]` — a longer raw-return history (default `burn_in_period=252` days) ending at the same point as `x`. It is **not** passed through the Transformer; it is used only by covariance-based and historical-simulation risk terms in the loss functions and evaluation metrics.
@@ -92,9 +92,7 @@ The score model is `ScoreBlockGDAT` in `models/score_block.py` (config `score_bl
 
 ```
 .
-├── train.py              # Main entry point: data pipeline, training loop, grid search, evaluation
-├── config.py              # Central configuration: dataset paths, split dates, model/training hyperparameters
-├── graphical_lasso.py      # Estimates the asset adjacency graph from historical returns (run before training)
+├── config.py               # Central configuration: dataset paths, split dates, model/training hyperparameters
 │
 ├── models/
 │   ├── axial_transformer.py  # Core dual-axis (N-axis / T-axis) attention Transformer
@@ -106,19 +104,31 @@ The score model is `ScoreBlockGDAT` in `models/score_block.py` (config `score_bl
 │   ├── loss.py                 # Risk-adjusted portfolio loss functions
 │   └── evaluation_metrics.py   # Backtest evaluation metrics
 │
+├── scripts/
+│   ├── train.py               # Main entry point: data pipeline, training loop, grid search, evaluation
+│   └── graphical_lasso.py      # Estimates the asset adjacency graph from historical returns (run before training)
+│
 ├── data/                  # NOT included — user-provided datasets (see Data Preparation below)
 └── experiments/            # Output directory for logs and result CSVs (auto-created at runtime)
 ```
 
 ## Installation
 
-Requires Python 3.9+.
+Developed and tested with Python 3.13 and PyTorch 2.6.0 (CUDA 12.6 build).
 
 ```bash
 git clone <repository-url>
 cd R26-package
 pip install -r requirements.txt
 ```
+
+`requirements.txt` pins `torch==2.6.0` without a CUDA suffix, since CUDA-specific wheels aren't available on PyPI directly. To install the exact CUDA 12.6 build used for development:
+
+```bash
+pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+```
+
+For other CUDA versions or a CPU-only install, use the [PyTorch install selector](https://pytorch.org/get-started/locally/) and then install the remaining dependencies from `requirements.txt`.
 
 ## Data Preparation
 
@@ -141,7 +151,7 @@ Register each dataset in the `DATASETS` dictionary in `config.py` (see [Configur
 The N-axis attention mask requires a precomputed adjacency matrix per dataset:
 
 ```bash
-python graphical_lasso.py
+python -m scripts.graphical_lasso
 ```
 
 This reads each dataset's training-period returns, fits a `GraphicalLasso` model, and writes the resulting adjacency matrices (full, positive-only, negative-only) plus diagnostic plots to `data/<DATASET_NAME>/graphical_lasso/`.
@@ -153,10 +163,10 @@ Edit `config.py` to set dataset paths/splits and default model/training hyperpar
 ### 3. Run training and evaluation
 
 ```bash
-python train.py
+python -m scripts.train
 ```
 
-`train.py` runs a grid search over the configured parameter space. For each combination, it trains the GDAT model, backtests on the held-out test period, and aggregates results.
+`scripts/train.py` runs a grid search over the configured parameter space. For each combination, it trains the GDAT model, backtests on the held-out test period, and aggregates results.
 
 ### 4. Inspect results
 
@@ -172,7 +182,7 @@ All configuration lives in `config.py`:
 - **`DEFAULT_DATASET`** — fallback dataset name.
 - **`CONFIG['model']`** — model/data hyperparameters: `burn_in_period`, `sequence_length`, `horizon`, `batch_size`, `num_epochs`, `learning_rate`, `risk_aversion`, `risk_free_rate`.
 - **`CONFIG['training']`** — `early_stop_patience`, `min_train_loss`, `max_train_samples`, `sharpe_loss_mode`.
-- **`GRID_SEARCH_CONFIG`** — the parameter grid used by `train.py` (GDAT hyperparameters, loss types, datasets, seeds, portfolio strategies, etc.).
+- **`GRID_SEARCH_CONFIG`** — the parameter grid used by `scripts/train.py` (GDAT hyperparameters, loss types, datasets, seeds, portfolio strategies, etc.).
 - **`PORTFOLIO_METRICS_MODE`** — `"micro"` (average of per-sample ratios) or `"macro"` (ratio of averaged return/risk) aggregation for evaluation metrics.
 
 ## Citation
