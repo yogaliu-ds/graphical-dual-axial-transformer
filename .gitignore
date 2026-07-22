@@ -1,13 +1,6 @@
 /data
 /experiments
-/model_output
 /__pycache__/
-/training_history.png
-/Colab Train.ipynb
-/output_results.csv
-/output_log.txt
-/Main Result.xlsx
-/analysis_results
 /models/__pycache__/
 /utils/__pycache__/
 /scripts/__pycache__/
